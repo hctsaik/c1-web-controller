@@ -1,11 +1,11 @@
 {
   "name": "c1-web-controller",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
-  "description": "Unofficial LiberLive C1 web controller (Web Bluetooth + Web MIDI)",
+  "description": "Unofficial C1 practice board (Web Bluetooth play-along with user charts)",
   "scripts": {
-    "test": "node --test tests/protocol.test.mjs",
+    "test": "node --test tests/*.test.mjs",
     "screenshots": "node scripts/screenshot.mjs"
   }
 }

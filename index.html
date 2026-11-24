@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#12151c">
+  <meta name="color-scheme" content="dark light">
+  <meta name="description" content="非官方 LiberLive C1 網頁控制器：在 Chrome 以 Web Bluetooth 顯示演奏狀態並送出控制指令。">
+  <title>C1 網頁控制器</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">跳到主要內容</a>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true"></span>
+      <div>
+        <h1>C1 網頁控制器</h1>
+        <p class="tagline">LiberLive C1 · 非官方</p>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <span id="conn-pill" class="pill pill-idle">未連線</span>
+      <button type="button" id="btn-theme" class="icon-btn" aria-label="切換深色或淺色">淺色</button>
+    </div>
+  </header>
+
+  <main id="main">
+    <section id="support-banner" class="banner banner-warn" hidden>
+      <strong>這個瀏覽器無法連線。</strong>
+      <p id="support-text">請用 Android 或電腦上的 Google Chrome 開啟本頁。iOS Safari 不支援 Web Bluetooth。</p>
+    </section>
+
+    <section id="mock-banner" class="banner banner-info" hidden>
+      <strong>目前是模擬模式。</strong>
+      <p>沒有真正連到 C1。通知與寫入都在這個頁面裡模擬，方便先看畫面與除錯面板。</p>
+    </section>
+
+    <section class="card warn-card" id="warn-card">
+      <details id="warn-details" open>
+        <summary><h2>連線前請先看</h2></summary>
+        <ul class="warn-list">
+          <li>請先<strong>完全關閉官方 LiberLive App</strong>。C1 同時只能連一台裝置。</li>
+          <li><strong>不要</strong>在手機的系統藍牙設定裡配對，請只用本頁的「連線 C1」按鈕。</li>
+          <li>請把這個分頁<strong>保持在前景</strong>，切到背景或鎖上螢幕可能會斷線。</li>
+          <li>這裡的協定來自第三方原始碼，屬於<strong>非官方解析</strong>，可能隨韌體改變而失效。</li>
+        </ul>
+      </details>
+    </section>
+
+    <section class="card">
+      <h2>連線</h2>
+      <p class="hint" id="connect-hint">會掃描名稱以 Liber 開頭的裝置（官方顯示為 LiberLive C1）。</p>
+      <div class="btn-row">
+        <button type="button" id="btn-connect" class="btn btn-primary">連線 C1</button>
+        <button type="button" id="btn-connect-all" class="btn btn-secondary">掃描全部裝置</button>
+      </div>
+      <div class="btn-row">
+        <button type="button" id="btn-reconnect" class="btn btn-ghost" hidden>重新連線</button>
+        <button type="button" id="btn-disconnect" class="btn btn-ghost" hidden>中斷連線</button>
+      </div>
+      <p id="connect-status" class="status-line" role="status"></p>
+    </section>
+
+    <section class="card live-card" id="live">
+      <div class="section-head">
+        <h2>演奏狀態</h2>
+        <span class="badge">非官方解析</span>
+      </div>
+      <div class="live-grid">
+        <div class="live-key">
+          <span class="live-label">調性</span>
+          <span id="live-key" class="live-value">—</span>
+        </div>
+        <div class="live-chord">
+          <span class="live-label">和弦</span>
+          <span id="live-chord" class="live-value">—</span>
+        </div>
+        <div class="live-tempo">
+          <span class="live-label">速度</span>
+          <span id="live-tempo" class="live-value">—</span>
+          <span class="live-unit">BPM</span>
+        </div>
+      </div>
+      <p id="live-mode" class="live-mode"></p>
+      <div class="paddle-row">
+        <div class="paddle" data-paddle="A">
+          <span class="live-label">撥片 A</span>
+          <div class="paddle-meter" aria-hidden="true"><span class="paddle-marks"></span><span id="paddle-a-thumb" class="paddle-thumb"></span></div>
+          <span id="paddle-a-readout" class="readout">—</span>
+        </div>
+        <div class="paddle" data-paddle="B">
+          <span class="live-label">撥片 B</span>
+          <div class="paddle-meter" aria-hidden="true"><span class="paddle-marks"></span><span id="paddle-b-thumb" class="paddle-thumb"></span></div>
+          <span id="paddle-b-readout" class="readout">—</span>
+        </div>
+      </div>
+      <p id="live-bits" class="bits-line">等待通知…</p>
+      <pre id="live-hex" class="hex-live" aria-label="最新通知十六進位">—</pre>
+    </section>
+
+    <section class="card" id="controls">
+      <div class="section-head">
+        <h2>控制</h2>
+        <span class="badge badge-warn">僅來源有記載的指令</span>
+      </div>
+      <p class="hint">下列按鈕只會送出 orinayo-pico 原始碼裡出現過的封包。來源沒寫的內容，請用下方除錯面板的手動寫入。</p>
+
+      <div class="control-block">
+        <h3>連線時來源會寫入</h3>
+        <p class="note" id="note-chord-mappings"></p>
+        <button type="button" id="btn-cmd-chord_mappings" class="btn btn-secondary" disabled>寫入和弦對應</button>
+      </div>
+
+      <div class="control-block experimental">
+        <h3>實驗性指令 <span class="badge badge-warn">實驗性</span></h3>
+        <p class="note">這些指令在來源裡被註解掉，屬於實驗。欄位預設值與來源範例相同；若你改了數值，送出的就不是來源裡那一組位元組。</p>
+
+        <form id="form-set_key" class="exp-form" data-command="set_key">
+          <div class="form-title">設定調性</div>
+          <p class="note" data-note="set_key"></p>
+          <label>數值（來源範例為 0）
+            <input type="number" name="value" min="0" max="255" value="0" inputmode="numeric">
+          </label>
+          <p class="hypothesis">假設（未經驗證）：通知解析把 0–6 當成 C–B。寫入是不是同一套編碼，目前不知道。</p>
+          <pre class="hex-preview" data-preview="set_key"></pre>
+          <button type="submit" class="btn btn-secondary" disabled>送出設定調性</button>
+        </form>
+
+        <form id="form-set_chord" class="exp-form" data-command="set_chord">
+          <div class="form-title">設定和弦節奏</div>
+          <p class="note" data-note="set_chord"></p>
+          <div class="field-grid">
+            <label>paddle <input type="number" name="paddle" min="0" max="255" value="0" inputmode="numeric"></label>
+            <label>group <input type="number" name="group" min="0" max="255" value="4" inputmode="numeric"></label>
+            <label>item <input type="number" name="item" min="0" max="255" value="12" inputmode="numeric"></label>
+            <label>key <input type="number" name="key" min="0" max="255" value="1" inputmode="numeric"></label>
+            <label>difficulty <input type="number" name="difficulty" min="0" max="255" value="1" inputmode="numeric"></label>
+          </div>
+          <pre class="hex-preview" data-preview="set_chord"></pre>
+          <button type="submit" class="btn btn-secondary" disabled>送出設定和弦節奏</button>
+        </form>
+
+        <form id="form-set_drum" class="exp-form" data-command="set_drum">
+          <div class="form-title">設定鼓組</div>
+          <p class="note" data-note="set_drum"></p>
+          <div class="field-grid">
+            <label>group <input type="number" name="group" min="0" max="255" value="46" inputmode="numeric"></label>
+            <label>item <input type="number" name="item" min="0" max="255" value="24" inputmode="numeric"></label>
+            <label>paddle <input type="number" name="paddle" min="0" max="255" value="0" inputmode="numeric"></label>
+            <label>difficulty <input type="number" name="difficulty" min="0" max="255" value="1" inputmode="numeric"></label>
+            <label>auto-bass <input type="number" name="autoBass" min="0" max="255" value="1" inputmode="numeric"></label>
+          </div>
+          <pre class="hex-preview" data-preview="set_drum"></pre>
+          <button type="submit" class="btn btn-secondary" disabled>送出設定鼓組</button>
+        </form>
+
+        <div class="preset-grid">
+          <button type="button" class="btn btn-ghost" data-exact="set_chord_type" disabled>設定和弦類型（來源原樣）</button>
+          <button type="button" class="btn btn-ghost" data-exact="chord_tip" disabled>和弦提示（來源原樣）</button>
+          <button type="button" class="btn btn-ghost" data-exact="chord_preview" disabled>和弦預覽（來源原樣）</button>
+          <button type="button" class="btn btn-ghost" data-exact="drum_preview" disabled>鼓組預覽（來源原樣）</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="section-head">
+        <h2>MIDI 輸入</h2>
+        <span id="midi-pill" class="badge">未啟用</span>
+      </div>
+      <p class="hint">把外接 MIDI 鍵盤、踏板的 Note、CC 或 Program Change 對應到上面的 C1 指令。對應表存在這個瀏覽器的 localStorage。</p>
+      <div class="btn-row">
+        <button type="button" id="btn-midi" class="btn btn-secondary">啟用 MIDI</button>
+      </div>
+      <p id="midi-status" class="status-line"></p>
+      <div id="midi-inputs" class="midi-inputs"></div>
+      <div class="learn-box">
+        <h3>學習對應</h3>
+        <label>要觸發的指令
+          <select id="learn-action"></select>
+        </label>
+        <button type="button" id="btn-learn" class="btn btn-secondary" disabled>開始學習</button>
+        <p id="learn-status" class="status-line">先啟用 MIDI，再選一個指令並按下「開始學習」，然後在鍵盤或踏板上送出訊息。</p>
+      </div>
+      <ul id="midi-maps" class="map-list"></ul>
+    </section>
+
+    <section class="card debug-card" id="debug">
+      <div class="section-head">
+        <h2>除錯</h2>
+        <span class="badge">請用這裡核對真實 C1</span>
+      </div>
+      <p class="hint">連線後會列出 GATT 服務與特徵。若非官方 UUID 對不上，可改訂閱或寫入清單裡的其他特徵。</p>
+
+      <h3>GATT 服務</h3>
+      <div id="gatt-dump" class="gatt-dump">尚未連線。</div>
+
+      <h3>最新通知（原始十六進位）</h3>
+      <pre id="debug-hex" class="hex-block">尚無通知</pre>
+      <ol id="notify-log" class="log-list"></ol>
+
+      <h3>寫入紀錄</h3>
+      <ol id="write-log" class="log-list"></ol>
+
+      <h3>手動寫入十六進位</h3>
+      <form id="form-hex" class="hex-form">
+        <label>位元組（例如 B1 1E 18 01 00 00）
+          <textarea id="hex-input" rows="3" spellcheck="false" placeholder="B1 1E 18 01 00 00"></textarea>
+        </label>
+        <pre id="hex-parsed" class="hex-preview">預覽會顯示在這裡</pre>
+        <button type="submit" id="btn-hex-write" class="btn btn-primary" disabled>寫入所選特徵</button>
+      </form>
+
+      <div id="mock-tools" class="mock-tools" hidden>
+        <h3>模擬通知</h3>
+        <div id="mock-fixtures" class="preset-grid"></div>
+        <form id="form-mock-hex" class="hex-form">
+          <label>把這組十六進位當作通知
+            <textarea id="mock-hex-input" rows="2" spellcheck="false" placeholder="00 00 00 00 10 00 00 78 00 32 32"></textarea>
+          </label>
+          <button type="submit" class="btn btn-secondary">送進解析</button>
+        </form>
+      </div>
+    </section>
+
+    <footer class="site-foot">
+      <p>這不是 LiberLive 官方產品，也沒有使用任何官方 SDK。協定整理自 <a href="https://github.com/Jus-Be/orinayo-pico/blob/master/bluepad32/bt/uni_bt_le.c" rel="noopener noreferrer">orinayo-pico uni_bt_le.c</a>。</p>
+      <p>原始碼：<a href="https://github.com/hctsaik/c1-web-controller" rel="noopener noreferrer">hctsaik/c1-web-controller</a></p>
+    </footer>
+  </main>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

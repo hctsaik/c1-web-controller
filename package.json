@@ -1,0 +1,11 @@
+{
+  "name": "c1-web-controller",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Unofficial LiberLive C1 web controller (Web Bluetooth + Web MIDI)",
+  "scripts": {
+    "test": "node --test tests/protocol.test.mjs",
+    "screenshots": "node scripts/screenshot.mjs"
+  }
+}
